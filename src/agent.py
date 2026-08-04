@@ -228,9 +228,9 @@ def _fallback(request: str, songs: List[Dict]) -> str:
     profile = _keyword_profile(request, songs)
     log.info("PLAN (fallback) profile=%s", profile)
     ranked = recommend_songs(profile, songs, k=5)
-    lines = [f"(Deterministic fallback — no AI credentials found. Parsed profile: {profile})", ""]
+    lines = [f"(Deterministic fallback: no AI credentials found. Parsed profile: {profile})", ""]
     for rank, (song, score, explanation) in enumerate(ranked, start=1):
-        lines.append(f"{rank}. {song['title']} by {song['artist']} — score {score:.2f}")
+        lines.append(f"{rank}. {song['title']} by {song['artist']} - score {score:.2f}")
         lines.append(f"   Because: {explanation}")
     return "\n".join(lines)
 

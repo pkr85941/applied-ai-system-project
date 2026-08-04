@@ -3,11 +3,13 @@
 %% Source of truth for the architecture diagram; export a PNG to assets/ for the README.
 
 flowchart TD
-    %% ---- Inputs ----
+    %% ---- Human + Inputs ----
+    Human(["👤 Listener (human)<br/>submits a request · reviews the result"])
     subgraph Inputs["Inputs"]
         CSV[("data/songs.csv<br/>18-song catalog")]
         Req["Free-text request<br/>e.g. 'something moody for a late-night drive'"]
     end
+    Human --> Req
 
     %% ---- Data loading ----
     Load["load_songs()<br/>parse CSV → list of Song dicts<br/>cast numeric fields to float/int"]
@@ -62,16 +64,19 @@ flowchart TD
     Rank --> Out
     Explain --> Out
 
-    %% ---- Results feed back to the agent's CHECK step ----
+    %% ---- Results feed back to the agent's CHECK step (AI self-verification) ----
     Out -->|"scored results (tool result)"| Check
     Check -->|"good enough"| Final["Final AI recommendation<br/>friendly summary grounded in engine explanations"]
 
-    %% ---- Harness / evaluation ----
+    %% ---- Human reviews the AI result (human-in-the-loop check) ----
+    Final -->|"reviews &amp; accepts / rejects"| Human
+
+    %% ---- Harness / evaluation (automated checks on AI results) ----
     subgraph Harness["Runner &amp; evaluation"]
         Main["src/main.py<br/>named profiles + adversarial edge cases"]
         Tests["tests/<br/>test_recommender.py · test_agent.py"]
     end
     Main --> Prefs
     Out --> Main
-    Tests -.validates.-> Scoring
-    Tests -.validates.-> Agent
+    Tests -.checks results of.-> Scoring
+    Tests -.checks results of.-> Agent

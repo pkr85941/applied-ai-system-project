@@ -1,0 +1,11 @@
+2026-08-03 19:54:04,343 [WARNING] anthropic SDK not installed.
+2026-08-03 19:54:04,343 [INFO] Falling back to deterministic keyword recommender (no Claude credentials).
+2026-08-03 19:54:04,343 [INFO] PLAN (fallback) profile={'genre': 'lofi', 'mood': 'chill', 'energy': 0.3, 'likes_acoustic': True}
+2026-08-03 20:02:00,851 [INFO] ACT  recommend_songs(profile={'genre': 'pop', 'mood': 'happy', 'energy': 0.8, 'likes_acoustic': False, 'k': 5})
+2026-08-03 20:02:00,851 [INFO] CHECK top score=4.5 across 2 results
+2026-08-03 20:02:00,852 [INFO] ACT  get_catalog_summary()
+2026-08-03 20:02:00,852 [WARNING] Unknown tool requested: does_not_exist
+2026-08-03 20:03:00,580 [INFO] ACT  recommend_songs(profile={'genre': 'pop', 'mood': 'happy', 'energy': 0.8, 'likes_acoustic': False, 'k': 5})
+2026-08-03 20:03:00,580 [INFO] CHECK top score=4.5 across 2 results
+2026-08-03 20:03:00,581 [INFO] ACT  get_catalog_summary()
+2026-08-03 20:03:00,581 [WARNING] Unknown tool requested: does_not_exist

@@ -19,6 +19,20 @@ plain-language explanation of why each song scored the way it did.
 
 ---
 
+## System Architecture
+
+![VibeFinder 1.0 system architecture](assets/architecture.png)
+
+Inputs (the song catalog and a user's taste profile) flow into the scoring core in
+`src/recommender.py`, where a weighted recipe scores every song. Ranking sorts those
+scores into a top-k list while an explanation builder attaches a plain-language "Because…"
+reason to each pick. The runner (`src/main.py`) drives named profiles and adversarial
+edge cases, and the test suite validates the scoring core.
+
+*Diagram source: [`diagrams/architecture.mmd`](diagrams/architecture.mmd) — editable at [mermaid.live](https://mermaid.live).*
+
+---
+
 ## How The System Works
 
 Real-world recommenders (Spotify, YouTube, etc.) don't just look at one song at a
@@ -137,6 +151,51 @@ flowchart LR
 
 ---
 
+## Advanced AI Feature: Agentic Workflow
+
+VibeFinder 2.0 adds an **agentic layer** ([`src/agent.py`](src/agent.py)) on top of the
+deterministic engine, powered by Claude. Instead of hand-filling a structured
+profile, the listener types a request in plain language —
+*"something moody for a late-night drive"* — and the agent **plans, acts, and checks
+its own work**:
+
+| Stage | What the agent does |
+|-------|---------------------|
+| **Plan** | Calls the `get_catalog_summary` tool to learn which genres/moods actually exist, then translates the free-text request into a taste profile. |
+| **Act** | Calls the `recommend_songs` tool — *your existing deterministic scoring engine* — to generate real, scored recommendations. |
+| **Check** | Reads the returned scores. A weak top score or a missing genre match means the catalog fit is poor. |
+| **Refine** | Adjusts the profile (e.g. relaxes an unavailable genre to the closest one, or shifts target energy) and calls the engine again. |
+
+The AI is **fully integrated into the main application logic**, not bolted on: the
+rule-based scorer in [`recommender.py`](src/recommender.py) is exposed to Claude as a
+*tool*, so the model decides *what to ask for* and *whether the answer is good enough*,
+while the trustworthy engine does the actual scoring. Claude never invents songs,
+artists, or scores — it can only report what the engine returned.
+
+### Reliability & guardrails
+
+- **Logging** — every Plan / Act / Check step is logged to stderr and `logs/agent_run.log`.
+- **Input validation** — profiles produced by the model are clamped and coerced
+  (`target_energy` forced into `[0, 1]`, `k` bounded, genres/moods lowercased) before scoring.
+- **Iteration cap** — the agent loop is bounded (`MAX_STEPS`) so it can never spin forever.
+- **Graceful fallback** — if the Anthropic SDK isn't installed or no credentials are
+  found, the system falls back to a deterministic keyword parser and still runs, so the
+  project is **reproducible without any secret**.
+- **Typed error handling** — auth, connection, and API-status errors are caught and
+  routed to the fallback rather than crashing.
+
+```
+=== Request: chill lofi for late-night studying, I like acoustic ===
+
+1. Library Rain by Paper Lanterns — score 4.95
+   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.95), acoustic bonus (+0.5)
+2. Midnight Coding by LoRoom — score 4.88
+   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.88), acoustic bonus (+0.5)
+...
+```
+
+---
+
 ## Getting Started
 
 ### Setup
@@ -154,11 +213,30 @@ flowchart LR
 pip install -r requirements.txt
 ```
 
-3. Run the app:
+3. Run the deterministic recommender (named profiles + edge cases):
 
 ```bash
 python -m src.main
 ```
+
+4. **(Optional) Enable the AI agent.** Set your Anthropic API key so the agentic
+   layer can call Claude:
+
+   ```bash
+   export ANTHROPIC_API_KEY=sk-ant-...      # Mac or Linux
+   setx ANTHROPIC_API_KEY sk-ant-...        # Windows
+   ```
+
+   Then ask for a recommendation in plain language:
+
+   ```bash
+   python -m src.agent "something moody for a late-night drive"
+   ```
+
+   > No API key? The command still works — it automatically falls back to a
+   > deterministic keyword parser and tells you it did so. To use a different or
+   > cheaper model, set `VIBEFINDER_MODEL` (defaults to `claude-opus-5`), e.g.
+   > `export VIBEFINDER_MODEL=claude-haiku-4-5`.
 
 ### Running Tests
 
@@ -168,7 +246,10 @@ Run the starter tests with:
 pytest
 ```
 
-You can add more tests in `tests/test_recommender.py`.
+Tests live in `tests/test_recommender.py` (the scoring engine) and
+`tests/test_agent.py` (the agent's validation, catalog summary, keyword fallback,
+and tool dispatch). The Claude-driven loop itself is not unit-tested because it
+requires live API credentials.
 
 ---
 

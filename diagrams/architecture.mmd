@@ -1,0 +1,77 @@
+%% VibeFinder 2.0 — System Architecture
+%% Content-based music recommender with an agentic AI layer (Claude tool-use).
+%% Source of truth for the architecture diagram; export a PNG to assets/ for the README.
+
+flowchart TD
+    %% ---- Inputs ----
+    subgraph Inputs["Inputs"]
+        CSV[("data/songs.csv<br/>18-song catalog")]
+        Req["Free-text request<br/>e.g. 'something moody for a late-night drive'"]
+    end
+
+    %% ---- Data loading ----
+    Load["load_songs()<br/>parse CSV → list of Song dicts<br/>cast numeric fields to float/int"]
+    CSV --> Load
+
+    %% ---- Agentic AI layer ----
+    subgraph Agent["Agentic layer (src/agent.py) — Claude, adaptive thinking + tool use"]
+        Plan["PLAN<br/>get_catalog_summary tool<br/>→ available genres · moods · energy range"]
+        Act["ACT<br/>translate request → taste profile<br/>call recommend_songs tool"]
+        Check["CHECK<br/>inspect top score &amp; genre match<br/>good enough?"]
+        Refine["REFINE<br/>relax genre / shift energy<br/>and call the engine again"]
+        Guard["Guardrails<br/>validate &amp; clamp profile · MAX_STEPS cap<br/>logging · typed error handling"]
+
+        Plan --> Act
+        Act --> Check
+        Check -->|"weak / no match"| Refine
+        Refine --> Act
+        Guard -.-> Act
+    end
+
+    Req --> Plan
+
+    %% ---- Fallback (no credentials) ----
+    Fallback["Deterministic fallback<br/>keyword parser (no Claude credentials)<br/>free text → taste profile"]
+    Req -.->|"no API key / SDK"| Fallback
+
+    %% ---- Taste profile ----
+    Prefs["Taste profile<br/>genre · mood · target energy · likes_acoustic"]
+    Act --> Prefs
+    Fallback --> Prefs
+
+    %% ---- Scoring core ----
+    subgraph Scoring["Scoring core (recommender.py) — trustworthy engine"]
+        Score["score_song() → _score()<br/>weighted Algorithm Recipe"]
+        Weights["Weights &amp; rules<br/>genre +2.0 · mood +1.5<br/>energy_similarity ×1.0<br/>acoustic bonus +0.5 (acousticness &gt; 0.6)"]
+        Weights -.-> Score
+    end
+
+    Load --> Score
+    Prefs --> Score
+
+    %% ---- Ranking ----
+    Rank["recommend_songs()<br/>score every song → sort desc → take top-k"]
+    Score --> Rank
+
+    %% ---- Explanation ----
+    Explain["Explanation builder<br/>join per-feature reasons into plain language"]
+    Score --> Explain
+
+    %% ---- Output ----
+    Out["Ranked top-k recommendations<br/>title · artist · score · 'Because…' explanation"]
+    Rank --> Out
+    Explain --> Out
+
+    %% ---- Results feed back to the agent's CHECK step ----
+    Out -->|"scored results (tool result)"| Check
+    Check -->|"good enough"| Final["Final AI recommendation<br/>friendly summary grounded in engine explanations"]
+
+    %% ---- Harness / evaluation ----
+    subgraph Harness["Runner &amp; evaluation"]
+        Main["src/main.py<br/>named profiles + adversarial edge cases"]
+        Tests["tests/<br/>test_recommender.py · test_agent.py"]
+    end
+    Main --> Prefs
+    Out --> Main
+    Tests -.validates.-> Scoring
+    Tests -.validates.-> Agent

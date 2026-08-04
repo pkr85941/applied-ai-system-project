@@ -182,12 +182,14 @@ lines mirror what is written to `logs/agent_run.log`.)*
 
 ### B) The deterministic fallback path (no API key), verified and reproducible
 
-These are **real captured runs** from `python -m src.agent "..."` with no credentials
-configured, so the system parses the request with keywords and calls the same engine:
+These are **real captured runs** with no credentials configured, so the system parses
+the request with keywords and calls the same engine. The command and its exact output
+are shown together:
 
-**Input:** `"something upbeat and happy for a pop workout"`
-```
-Parsed profile: {'genre': 'pop', 'mood': 'happy', 'energy': 0.9, 'likes_acoustic': False}
+```console
+$ python -m src.agent "something upbeat and happy for a pop workout"
+
+(Deterministic fallback: no AI credentials found. Parsed profile: {'genre': 'pop', 'mood': 'happy', 'energy': 0.9, 'likes_acoustic': False})
 
 1. Sunrise City by Neon Echo - score 4.42
    Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.92)
@@ -197,9 +199,10 @@ Parsed profile: {'genre': 'pop', 'mood': 'happy', 'energy': 0.9, 'likes_acoustic
    Because: mood match (+1.5), energy similarity (+0.86)
 ```
 
-**Input:** `"give me intense rock for the gym"`
-```
-Parsed profile: {'genre': 'rock', 'mood': 'intense', 'energy': 0.9, 'likes_acoustic': False}
+```console
+$ python -m src.agent "give me intense rock for the gym"
+
+(Deterministic fallback: no AI credentials found. Parsed profile: {'genre': 'rock', 'mood': 'intense', 'energy': 0.9, 'likes_acoustic': False})
 
 1. Storm Runner by Voltline - score 4.49
    Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.99)
@@ -207,14 +210,40 @@ Parsed profile: {'genre': 'rock', 'mood': 'intense', 'energy': 0.9, 'likes_acous
    Because: mood match (+1.5), energy similarity (+0.97)
 ```
 
-**Input:** `"calm ambient music to fall asleep to"`
-```
-Parsed profile: {'genre': 'ambient', 'mood': '', 'energy': 0.3, 'likes_acoustic': False}
+```console
+$ python -m src.agent "calm ambient music to fall asleep to"
+
+(Deterministic fallback: no AI credentials found. Parsed profile: {'genre': 'ambient', 'mood': '', 'energy': 0.3, 'likes_acoustic': False})
 
 1. Spacewalk Thoughts by Orbit Bloom - score 2.98
    Because: genre match (+2.0), energy similarity (+0.98)
 2. Quiet Harbor by Paper Lanterns - score 2.88
    Because: genre match (+2.0), energy similarity (+0.88)
+```
+
+### C) Reliability and guardrail evidence (captured output)
+
+**Logging plus graceful fallback.** With `stderr` shown, you can see the guardrail
+decide to degrade safely and log each step (timestamps will vary per run):
+
+```console
+$ python -m src.agent "give me intense rock for the gym"
+2026-08-04 01:08:39,657 [WARNING] anthropic SDK not installed.
+2026-08-04 01:08:39,658 [INFO] Falling back to deterministic keyword recommender (no Claude credentials).
+2026-08-04 01:08:39,658 [INFO] PLAN (fallback) profile={'genre': 'rock', 'mood': 'intense', 'energy': 0.9, 'likes_acoustic': False}
+
+=== Request: give me intense rock for the gym ===
+(Deterministic fallback: no AI credentials found. ...)
+1. Storm Runner by Voltline - score 4.49
+   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.99)
+```
+
+**Empty-input guardrail** (handled safely, no crash):
+
+```console
+$ python -m src.agent
+Describe the vibe you're after: 
+Please describe what you want to listen to.
 ```
 
 ---
@@ -269,6 +298,14 @@ degrades to a deterministic fallback.
 | Agent: keyword fallback (genre/mood/energy/acoustic parsing) | 2 | ✅ pass |
 | Agent: tool dispatch (grounded results, unknown-tool error) | 3 | ✅ pass |
 | **Total** | **10** | **✅ 10/10** |
+
+Captured `pytest` run:
+
+```console
+$ pytest
+..........                                                               [100%]
+10 passed in 0.01s
+```
 
 **Human evaluation of system outputs** (real captured runs; criteria checked by me)
 
@@ -379,3 +416,19 @@ not *more objective*.
 > **Note:** My graded responsible-AI reflection (how I collaborated with AI, one helpful
 > and one flawed AI suggestion, and the system's limitations) lives in
 > [**model_card.md**](model_card.md), not here.
+
+---
+
+## Portfolio Note: What This Project Says About Me as an AI Engineer
+
+**Repository:** https://github.com/pkr85941/applied-ai-system-project
+
+This project reflects how I approach AI engineering: I treat the language model as one
+component in a larger system, not the whole system. I paired a non-deterministic AI
+planner with a deterministic, fully auditable scoring engine so that every output can be
+traced back to a concrete number, and I wrapped it in guardrails, logging, input
+validation, and a no-credentials fallback so the system stays reliable and reproducible
+even when the AI is unavailable. I test the parts I can test in isolation, and I am
+honest in writing about the parts I can't. To me, being an AI engineer is less about
+getting a model to say something impressive and more about designing a trustworthy,
+debuggable, and safe system around it that someone else can pick up and run.

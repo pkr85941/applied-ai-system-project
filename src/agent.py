@@ -202,8 +202,11 @@ def _keyword_profile(request: str, songs: List[Dict]) -> Dict:
     text = request.lower()
     summary = catalog_summary(songs)
 
-    genre = next((g for g in summary["genres"] if g in text), summary["genres"][0])
-    mood = next((m for m in summary["moods"] if m in text), summary["moods"][0])
+    # Only assert a genre/mood the text actually mentions. Guessing a default here
+    # (e.g. the alphabetically-first mood) would inject a misleading match — better
+    # to leave it blank and let the engine award no points for that feature.
+    genre = next((g for g in summary["genres"] if g in text), "")
+    mood = next((m for m in summary["moods"] if m in text), "")
 
     # Energy cues.
     calm_words = ("chill", "calm", "relax", "sleep", "study", "mellow", "quiet", "soft")

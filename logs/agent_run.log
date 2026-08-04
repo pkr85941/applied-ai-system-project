@@ -9,3 +9,30 @@
 2026-08-03 20:03:00,580 [INFO] CHECK top score=4.5 across 2 results
 2026-08-03 20:03:00,581 [INFO] ACT  get_catalog_summary()
 2026-08-03 20:03:00,581 [WARNING] Unknown tool requested: does_not_exist
+2026-08-04 00:21:03,505 [WARNING] anthropic SDK not installed.
+2026-08-04 00:21:03,505 [INFO] Falling back to deterministic keyword recommender (no Claude credentials).
+2026-08-04 00:21:03,505 [INFO] PLAN (fallback) profile={'genre': 'pop', 'mood': 'happy', 'energy': 0.9, 'likes_acoustic': False}
+2026-08-04 00:21:03,530 [WARNING] anthropic SDK not installed.
+2026-08-04 00:21:03,530 [INFO] Falling back to deterministic keyword recommender (no Claude credentials).
+2026-08-04 00:21:03,530 [INFO] PLAN (fallback) profile={'genre': 'rock', 'mood': 'intense', 'energy': 0.9, 'likes_acoustic': False}
+2026-08-04 00:21:03,556 [WARNING] anthropic SDK not installed.
+2026-08-04 00:21:03,556 [INFO] Falling back to deterministic keyword recommender (no Claude credentials).
+2026-08-04 00:21:03,556 [INFO] PLAN (fallback) profile={'genre': 'ambient', 'mood': 'aggressive', 'energy': 0.3, 'likes_acoustic': False}
+2026-08-04 00:22:59,104 [WARNING] anthropic SDK not installed.
+2026-08-04 00:22:59,104 [INFO] Falling back to deterministic keyword recommender (no Claude credentials).
+2026-08-04 00:22:59,105 [INFO] PLAN (fallback) profile={'genre': 'ambient', 'mood': '', 'energy': 0.3, 'likes_acoustic': False}
+2026-08-04 00:22:59,435 [INFO] ACT  recommend_songs(profile={'genre': 'pop', 'mood': 'happy', 'energy': 0.8, 'likes_acoustic': False, 'k': 5})
+2026-08-04 00:22:59,435 [INFO] CHECK top score=4.5 across 2 results
+2026-08-04 00:22:59,435 [INFO] ACT  get_catalog_summary()
+2026-08-04 00:22:59,436 [WARNING] Unknown tool requested: does_not_exist
+2026-08-04 00:25:08,794 [INFO] ACT  recommend_songs(profile={'genre': 'pop', 'mood': 'happy', 'energy': 0.8, 'likes_acoustic': False, 'k': 5})
+2026-08-04 00:25:08,795 [INFO] CHECK top score=4.5 across 2 results
+2026-08-04 00:25:08,795 [INFO] ACT  get_catalog_summary()
+2026-08-04 00:25:08,795 [WARNING] Unknown tool requested: does_not_exist
+2026-08-04 00:48:42,898 [INFO] ACT  recommend_songs(profile={'genre': 'pop', 'mood': 'happy', 'energy': 0.8, 'likes_acoustic': False, 'k': 5})
+2026-08-04 00:48:42,899 [INFO] CHECK top score=4.5 across 2 results
+2026-08-04 00:48:42,899 [INFO] ACT  get_catalog_summary()
+2026-08-04 00:48:42,900 [WARNING] Unknown tool requested: does_not_exist
+2026-08-04 00:49:13,408 [WARNING] anthropic SDK not installed.
+2026-08-04 00:49:13,408 [INFO] Falling back to deterministic keyword recommender (no Claude credentials).
+2026-08-04 00:49:13,408 [INFO] PLAN (fallback) profile={'genre': '', 'mood': '', 'energy': 0.5, 'likes_acoustic': False}

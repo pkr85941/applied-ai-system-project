@@ -2,7 +2,10 @@
 
 ## 1. Model Name  
 
-**VibeFinder 1.0**
+**VibeFinder 2.0** — an agentic music recommender that extends **VibeFinder 1.0** (my
+Module 1–3 content-based scoring engine) with an AI planning layer powered by Claude.
+The responsible-AI reflection for the Module 4 agentic system is in
+[Section 10](#10-responsible-ai-reflection-module-4).
 
 ---
 
@@ -248,3 +251,91 @@ the system confidently recommend an aggressive song taught me that these systems
 signal doesn't add up to something coherent. If I extended this project, I'd want to
 build in some way for the system to notice and communicate when a user's preferences
 don't have a good match, rather than always returning a confident top 5 regardless.
+
+---
+
+## 10. Responsible AI Reflection (Module 4)
+
+This section is the responsible-AI reflection for **VibeFinder 2.0**, the agentic layer
+([`src/agent.py`](src/agent.py)) that lets a listener make requests in plain language and
+has Claude plan a taste profile, call the deterministic scoring engine as a tool, check
+the results, and refine.
+
+### 10.1 What are the limitations or biases in your system?
+
+The Module 1–3 biases still apply and are now *inherited* by the AI layer, because the
+agent scores through the same engine: **genre dominance** (genre is the heaviest weight,
+so "right genre / wrong mood" beats "wrong genre / perfect mood"), a **tiny 18-song
+catalog** (most genres have 1–3 tracks, so results are bounded by what exists), and **no
+listening history or collaborative signal**. The agentic layer adds its own limitations:
+
+- **The AI can only be as good as the engine and catalog.** Claude can reason about a
+  request, but it cannot conjure a better-matching song that isn't in the CSV — it can
+  only pick the closest available profile.
+- **Language → profile mapping carries the model's own biases.** When Claude (or the
+  keyword fallback) maps a phrase like *"moody"* or *"chill"* to a specific genre/mood, it
+  is applying assumptions from its training about what those words mean — assumptions that
+  are cultural and contestable, not neutral facts about music.
+- **Non-determinism.** The same request can produce slightly different profiles or
+  phrasing across runs, which makes the AI path harder to test and less predictable than
+  the pure engine.
+- **External dependency.** The agentic path needs an API key, network, cost, and latency;
+  the fallback keeps the system *available* but at clearly lower quality.
+
+### 10.2 Could your AI be misused, and how would you prevent that?
+
+The main misuse risk is **overtrust** — presenting VibeFinder as if it "understands" a
+listener's taste. It will confidently return a top 5 for a contradictory or impossible
+request (e.g. `sad + high-energy metal`, or a genre absent from the catalog), and a
+polished natural-language summary from the AI can make a weak, toy-catalog result *sound*
+authoritative. At scale, the designer's weight choices (genre = 2.0) would get presented
+to users as if they were objective truths about music. Preventions built into the system:
+
+- **The engine is the only thing that scores.** Claude is restricted to *calling* the
+  scoring tool — it can never invent songs, artists, or numbers, so every claim traces
+  back to an auditable score.
+- **Transparency by default.** Every recommendation ships with a per-feature *"Because…"*
+  breakdown, so a user (or reviewer) can see exactly why a song ranked where it did.
+- **Guardrails.** Model-produced profiles are validated and clamped, the agent loop is
+  capped (`MAX_STEPS`), and errors degrade to the fallback instead of failing silently.
+- **Honest scoping.** The "Not intended for" section and documented limitations make clear
+  this is a teaching tool over 18 songs, not a product.
+- **Human-in-the-loop.** The listener reviews and accepts/rejects the final result.
+
+For a real deployment I would also add explicit contradiction detection and a "no good
+match found" signal, so the system communicates uncertainty instead of masking it.
+
+### 10.3 What surprised you while testing your AI's reliability?
+
+The most surprising thing was that **the least reliable part of the system was not the
+LLM — it was the "safe" deterministic fallback I wrote as a backup.** When I tested
+*"calm ambient music to fall asleep to"* with no API key, the keyword parser had no mood
+word to match, so it silently defaulted to the **alphabetically-first** mood in the
+catalog — *"aggressive"* — and confidently recommended a **metal** track (*Broken Mirror*)
+for a sleep playlist. I had assumed the risky, unpredictable component would be the AI and
+that the hand-written code was the trustworthy floor; it was the opposite. The failure was
+*silent and confident*, which is exactly the failure mode that's hardest to catch — it
+only surfaced because I fed the system an input the happy-path tests never covered. I
+fixed the parser to leave genre/mood blank when nothing matches, and the same request now
+returns calm ambient tracks.
+
+### 10.4 Collaboration with AI: one helpful suggestion and one flawed suggestion
+
+I built VibeFinder 2.0 with an AI coding assistant (Claude Code), which was genuinely
+useful for scaffolding and iterating quickly — but it also required real oversight.
+
+**One helpful suggestion.** When I asked which advanced feature to add, the assistant
+recommended an *agentic workflow that exposes the existing scoring engine to the model as
+a tool*, rather than letting the LLM generate recommendations directly. This turned out to
+be the backbone of the whole design: because the model can only *call* the deterministic
+engine, the system stays fully auditable and can't hallucinate songs or scores. It was the
+right architectural call and made the AI feature both easier to trust and easier to test.
+
+**One flawed suggestion.** The same assistant wrote the keyword fallback, and its code
+defaulted an unmatched mood to the alphabetically-first mood (`"aggressive"`). It read as
+perfectly reasonable in review — but it produced the "aggressive metal for a sleep
+playlist" bug in Section 10.3. I only caught it by *running* an edge-case input, not by
+reading the code. The lesson mirrors what I learned in Module 1–3 (an AI-suggested import
+that silently failed under `python -m src.main`): AI-generated code is often
+plausible-but-wrong in exactly the spots you don't think to test, so it has to be executed
+against adversarial inputs, not just accepted because it looks correct.

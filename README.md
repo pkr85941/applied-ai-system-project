@@ -1,176 +1,88 @@
-# 🎵 Music Recommender Simulation
+# 🎵 VibeFinder 2.0 — Agentic Music Recommender
 
-## Project Summary
+**What it does:** You describe the music you want in plain English — *"something moody
+for a late-night drive"* — and the system uses an AI agent (Claude) to turn that into a
+structured taste profile, score every song in the catalog with a transparent rule-based
+engine, check whether the results are actually good, and refine if they aren't. It
+returns a ranked list of songs, each with a plain-language *"Because…"* explanation.
 
-In this project you will build and explain a small music recommender system.
-
-Your goal is to:
-
-- Represent songs and a user "taste profile" as data
-- Design a scoring rule that turns that data into recommendations
-- Evaluate what your system gets right and wrong
-- Reflect on how this mirrors real world AI recommenders
-
-**VibeFinder 1.0** is a content-based recommender over an 18-song catalog. A listener
-states a favorite genre, favorite mood, target energy, and whether they like acoustic
-songs; the system scores every song with a weighted point system (genre match, mood
-match, energy closeness, acoustic bonus) and returns the top matches with a
-plain-language explanation of why each song scored the way it did.
+**Why it matters:** Most recommenders are black boxes — you can't see *why* a song was
+picked. VibeFinder pairs a fully transparent scoring engine (every point is auditable)
+with an AI planning layer that handles messy natural language. The AI decides *what to
+ask for*; the deterministic engine decides *the actual scores*. That split keeps the
+recommendations explainable and trustworthy while still accepting free-form requests —
+a small, readable model of how real content-based recommenders balance flexibility
+against accountability.
 
 ---
 
-## System Architecture
+## Original Project (Modules 1–3)
 
-![VibeFinder 1.0 system architecture](assets/architecture.png)
+This project extends **VibeFinder 1.0**, my Module 1–3 submission. VibeFinder 1.0 was a
+content-based music recommender over a hand-built 18-song catalog: a listener supplied a
+structured taste profile (`favorite_genre`, `favorite_mood`, `target_energy`,
+`likes_acoustic`), and the system scored every song with a weighted point recipe (genre
+match, mood match, energy closeness, acoustic bonus), then returned the top matches with
+a per-feature explanation of each score. Its goal was to show that a "recommendation" is
+really just **transparent scoring plus ranking** — and to make the resulting biases (e.g.
+genre dominance) visible and measurable rather than hidden.
 
-Inputs (the song catalog and a user's taste profile) flow into the scoring core in
-`src/recommender.py`, where a weighted recipe scores every song. Ranking sorts those
-scores into a top-k list while an explanation builder attaches a plain-language "Because…"
-reason to each pick. The runner (`src/main.py`) drives named profiles and adversarial
-edge cases, and the test suite validates the scoring core.
-
-*Diagram source: [`diagrams/architecture.mmd`](diagrams/architecture.mmd) — editable at [mermaid.live](https://mermaid.live).*
-
----
-
-## How The System Works
-
-Real-world recommenders (Spotify, YouTube, etc.) don't just look at one song at a
-time. At scale they combine **content signals** (the actual properties of a song —
-genre, tempo, energy) with **behavioral signals** (what millions of similar listeners
-skipped, replayed, or added to playlists) and learn patterns automatically. My version
-is a much smaller, transparent stand-in for the *content-based* half of that idea: it
-compares the measurable properties of each song to a user's stated taste and scores how
-well they match. It deliberately prioritizes the "vibe" of a song — how energetic and
-how positive it feels, plus its genre and mood — over popularity or listening history,
-because those are the features that a person can actually feel and describe.
-
-### Features each `Song` uses
-
-- `genre` — categorical anchor (pop, lofi, rock, jazz, ambient…)
-- `mood` — categorical vibe label (happy, chill, intense, focused…)
-- `energy` — numeric 0–1, how hyped vs. calm the song is
-- `valence` — numeric 0–1, musical positivity / happiness
-
-(The dataset also has `tempo_bpm`, `danceability`, and `acousticness`, which are good
-candidates for later experiments.)
-
-### What the `UserProfile` stores
-
-The user's preferences, matching the fields implemented in `src/recommender.py`:
-
-- `favorite_genre` (e.g. `"lofi"`)
-- `favorite_mood` (e.g. `"chill"`)
-- `target_energy` — a target value 0–1, e.g. `0.35`
-- `likes_acoustic` — a boolean, `True`/`False`
-
-(Early planning considered a `valence` target too, but the finalized recipe below
-uses `likes_acoustic` + `acousticness` instead — see the Algorithm Recipe.)
-
-### How the `Recommender` scores a song (Scoring Rule)
-
-For **categorical** features it awards points for an exact match. For **numeric**
-features it rewards *closeness* to the user's target rather than "bigger is better":
-
-```
-feature_score = 1 - |song_value - user_preference|      # for energy
-```
-
-Everything is combined with weights so some features matter more than others:
-
-```
-score = w_genre  · (genre matches?)
-      + w_mood   · (mood matches?)
-      + w_energy · (1 - |energy - target_energy|)
-      + acoustic_bonus · (likes_acoustic and acousticness > threshold?)
-```
-
-Genre is weighted highest, mood a bit lower, and energy closeness around 1.0, with a
-small conditional bonus for acoustic-loving users — see the finalized weights below.
-
-### How songs get chosen (Ranking Rule)
-
-The Scoring Rule gives one number per song. The Ranking Rule then sorts **all** songs
-by that score (highest first) and returns the top N. Both rules are needed: scoring
-judges a single song, while ranking makes the comparative decision across the whole
-catalog — which is what a recommendation actually is.
-
-### Example `UserProfile`
-
-```python
-UserProfile(
-    favorite_genre="lofi",
-    favorite_mood="chill",
-    target_energy=0.35,
-    likes_acoustic=True,
-)
-```
-
-Checked against the catalog, this profile clearly separates a match like *Midnight
-Coding* (lofi, chill, energy 0.42, acousticness 0.71 → near-top score) from a mismatch
-like *Broken Mirror* (metal, aggressive, energy 0.97, acousticness 0.05 → near-bottom
-score). It does **not** distinguish well between two songs of the *same* genre with
-different moods, since genre carries the most weight — a known limitation, not a bug.
-
-### Finalized Algorithm Recipe
-
-| Rule | Points |
-|---|---|
-| Genre match | `+2.0` |
-| Mood match | `+1.5` |
-| Energy similarity | `+1.0 × (1 - \|song.energy - target_energy\|)` |
-| Acoustic bonus | `+0.5` if `likes_acoustic` is `True` and `song.acousticness > 0.6` |
-
-Genre outweighs mood because it's the strongest "right bucket / wrong bucket" signal;
-energy is a continuous reward rather than a flat bonus since it's a closeness measure;
-the acoustic bonus is small and conditional since it only matters to some users.
-
-### Data Flow
-
-```mermaid
-flowchart LR
-    A[User Profile\nfavorite_genre, favorite_mood,\ntarget_energy, likes_acoustic] --> C
-    B[songs.csv\none row per song] --> C
-    C[Loop: score_song\nfor every song] --> D[Ranking\nsort by score, take top K]
-    D --> E[Top K Recommendations]
-```
-
-### Expected Biases
-
-- **Genre dominance**: because genre is worth the most points, a song in the "right"
-  genre but a mismatched mood can still outrank a song in the "wrong" genre with a
-  perfect mood/energy match. The system may over-prioritize genre and miss great
-  cross-genre matches.
-- **Small, hand-picked catalog**: 18 songs across ~13 genres means most genres have
-  only 1–2 songs, so results are heavily constrained by whatever happens to exist in
-  the CSV rather than a true "best match."
-- **No history/collaborative signal**: unlike real systems, this recommender has no
-  idea what similar users liked — it can only compare stated preferences to song
-  metadata, so it will keep recommending the same kind of song forever and can't
-  surprise the user with something outside their stated taste.
+**Module 4 (VibeFinder 2.0)** keeps that engine unchanged and wraps it in an **agentic AI
+layer** so the system now accepts natural-language requests and self-corrects — see
+[The Advanced AI Feature](#the-advanced-ai-feature-agentic-workflow) below.
 
 ---
 
-## Advanced AI Feature: Agentic Workflow
+## Architecture Overview
 
-VibeFinder 2.0 adds an **agentic layer** ([`src/agent.py`](src/agent.py)) on top of the
-deterministic engine, powered by Claude. Instead of hand-filling a structured
-profile, the listener types a request in plain language —
-*"something moody for a late-night drive"* — and the agent **plans, acts, and checks
-its own work**:
+![VibeFinder 2.0 system architecture](assets/architecture.png)
+
+*Diagram source: [`diagrams/architecture.mmd`](diagrams/architecture.mmd) — a Mermaid
+source file, editable/renderable at [mermaid.live](https://mermaid.live).*
+
+The system has three main components and a clear input → process → output flow:
+
+1. **Input.** A human **listener** submits a free-text request; the **song catalog**
+   (`data/songs.csv`) is loaded and parsed by `load_songs()`.
+2. **Agentic layer** (`src/agent.py`, the "agent") — the new AI component. It runs a
+   **Plan → Act → Check → Refine** loop: it *plans* a taste profile from the request,
+   *acts* by calling the scoring engine as a tool, *checks* the returned scores, and
+   *refines* the profile if the catalog fit is weak.
+3. **Scoring core** (`src/recommender.py`, the trustworthy "engine") — the deterministic
+   component carried over from 1.0. It scores every song against the taste profile,
+   ranks them, and builds the *"Because…"* explanations. **This is the only thing that
+   produces scores** — the AI never invents songs or numbers.
+4. **Output.** A ranked top-k list with explanations, summarized into a friendly final
+   recommendation.
+
+**Where results get checked** (three verification points, all shown on the diagram):
+
+- **AI self-check** — the agent's *CHECK* step inspects the top score / genre match and
+  loops back to *REFINE* if the fit is poor.
+- **Automated testing** — the `tests/` suite (`test_recommender.py`, `test_agent.py`)
+  *checks the results of* both the scoring engine and the agent's deterministic pieces.
+- **Human-in-the-loop** — the listener *reviews and accepts/rejects* the final AI
+  recommendation, closing the loop.
+
+---
+
+## The Advanced AI Feature: Agentic Workflow
+
+VibeFinder 2.0 adds an **agentic layer** ([`src/agent.py`](src/agent.py)) powered by
+Claude. Instead of hand-filling a structured profile, the listener types a request in
+plain language and the agent **plans, acts, and checks its own work**:
 
 | Stage | What the agent does |
 |-------|---------------------|
 | **Plan** | Calls the `get_catalog_summary` tool to learn which genres/moods actually exist, then translates the free-text request into a taste profile. |
-| **Act** | Calls the `recommend_songs` tool — *your existing deterministic scoring engine* — to generate real, scored recommendations. |
+| **Act** | Calls the `recommend_songs` tool — *the existing deterministic scoring engine* — to generate real, scored recommendations. |
 | **Check** | Reads the returned scores. A weak top score or a missing genre match means the catalog fit is poor. |
 | **Refine** | Adjusts the profile (e.g. relaxes an unavailable genre to the closest one, or shifts target energy) and calls the engine again. |
 
 The AI is **fully integrated into the main application logic**, not bolted on: the
-rule-based scorer in [`recommender.py`](src/recommender.py) is exposed to Claude as a
-*tool*, so the model decides *what to ask for* and *whether the answer is good enough*,
-while the trustworthy engine does the actual scoring. Claude never invents songs,
-artists, or scores — it can only report what the engine returned.
+rule-based scorer is exposed to Claude as a *tool*, so the model decides *what to ask
+for* and *whether the answer is good enough*, while the trustworthy engine does the
+actual scoring. Claude never invents songs, artists, or scores.
 
 ### Reliability & guardrails
 
@@ -184,43 +96,39 @@ artists, or scores — it can only report what the engine returned.
 - **Typed error handling** — auth, connection, and API-status errors are caught and
   routed to the fallback rather than crashing.
 
-```
-=== Request: chill lofi for late-night studying, I like acoustic ===
-
-1. Library Rain by Paper Lanterns — score 4.95
-   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.95), acoustic bonus (+0.5)
-2. Midnight Coding by LoRoom — score 4.88
-   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.88), acoustic bonus (+0.5)
-...
-```
-
 ---
 
-## Getting Started
+## Setup Instructions
 
-### Setup
+1. **Clone and enter the project:**
 
-1. Create a virtual environment (optional but recommended):
+   ```bash
+   git clone https://github.com/pkr85941/applied-ai-system-project.git
+   cd applied-ai-system-project
+   ```
+
+2. **Create a virtual environment** (optional but recommended):
 
    ```bash
    python -m venv .venv
    source .venv/bin/activate      # Mac or Linux
    .venv\Scripts\activate         # Windows
+   ```
 
-2. Install dependencies
+3. **Install dependencies:**
 
-```bash
-pip install -r requirements.txt
-```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-3. Run the deterministic recommender (named profiles + edge cases):
+4. **Run the deterministic recommender** (named profiles + adversarial edge cases):
 
-```bash
-python -m src.main
-```
+   ```bash
+   python -m src.main
+   ```
 
-4. **(Optional) Enable the AI agent.** Set your Anthropic API key so the agentic
-   layer can call Claude:
+5. **(Optional) Enable the AI agent.** Set your Anthropic API key so the agentic layer
+   can call Claude:
 
    ```bash
    export ANTHROPIC_API_KEY=sk-ant-...      # Mac or Linux
@@ -233,114 +141,240 @@ python -m src.main
    python -m src.agent "something moody for a late-night drive"
    ```
 
-   > No API key? The command still works — it automatically falls back to a
-   > deterministic keyword parser and tells you it did so. To use a different or
-   > cheaper model, set `VIBEFINDER_MODEL` (defaults to `claude-opus-5`), e.g.
+   > **No API key?** The command still works — it automatically falls back to a
+   > deterministic keyword parser and tells you it did so, so the project is fully
+   > runnable without secrets. To use a different or cheaper model, set
+   > `VIBEFINDER_MODEL` (defaults to `claude-opus-5`), e.g.
    > `export VIBEFINDER_MODEL=claude-haiku-4-5`.
 
-### Running Tests
+6. **Run the tests:**
 
-Run the starter tests with:
-
-```bash
-pytest
-```
-
-Tests live in `tests/test_recommender.py` (the scoring engine) and
-`tests/test_agent.py` (the agent's validation, catalog summary, keyword fallback,
-and tool dispatch). The Claude-driven loop itself is not unit-tested because it
-requires live API credentials.
+   ```bash
+   pytest
+   ```
 
 ---
 
-## Sample Recommendation Output
+## Sample Interactions
 
-Output of `python -m src.main` for the default profile (`genre=pop, mood=happy, energy=0.8`):
+### A) The agentic path (with an API key set) — representative
+
+With `ANTHROPIC_API_KEY` set, the agent plans a profile, calls the engine, checks the
+result, and refines. Example of the *plan → act → check → refine* behavior on an
+out-of-catalog request:
 
 ```
-Loaded songs: 18
+$ python -m src.agent "I want some opera, something dramatic"
 
-Top recommendations:
+[PLAN]  get_catalog_summary() → catalog has no 'opera'; closest dramatic genres: classical, metal
+[ACT]   recommend_songs(genre='classical', mood='romantic', energy=0.4, likes_acoustic=false)
+[CHECK] top score 4.35 — strong classical match found, good enough
 
-1. Sunrise City by Neon Echo - Score: 4.48
-   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.98)
+There's no opera in the catalog, so I went with the closest dramatic fit — classical:
 
-2. Gym Hero by Max Pulse - Score: 2.87
-   Because: genre match (+2.0), energy similarity (+0.87)
-
-3. Rooftop Lights by Indigo Parade - Score: 2.46
-   Because: mood match (+1.5), energy similarity (+0.96)
-
-4. Concrete Bloom by Kid Static - Score: 1.00
-   Because: energy similarity (+1.00)
-
-5. Night Drive Loop by Neon Echo - Score: 0.95
-   Because: energy similarity (+0.95)
+1. Slow Waltz for You by Elena Voss  (score 4.35)
+   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.85)
 ```
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or demo video link here -->
+*(Transcript is representative of the agent's behavior; the bracketed `[PLAN]/[ACT]/[CHECK]`
+lines mirror what is written to `logs/agent_run.log`.)*
+
+### B) The deterministic fallback path (no API key) — verified, reproducible
+
+These are **real captured runs** from `python -m src.agent "..."` with no credentials
+configured — the system parses the request with keywords and calls the same engine:
+
+**Input:** `"something upbeat and happy for a pop workout"`
+```
+Parsed profile: {'genre': 'pop', 'mood': 'happy', 'energy': 0.9, 'likes_acoustic': False}
+
+1. Sunrise City by Neon Echo — score 4.42
+   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.92)
+2. Gym Hero by Max Pulse — score 2.97
+   Because: genre match (+2.0), energy similarity (+0.97)
+3. Rooftop Lights by Indigo Parade — score 2.36
+   Because: mood match (+1.5), energy similarity (+0.86)
+```
+
+**Input:** `"give me intense rock for the gym"`
+```
+Parsed profile: {'genre': 'rock', 'mood': 'intense', 'energy': 0.9, 'likes_acoustic': False}
+
+1. Storm Runner by Voltline — score 4.49
+   Because: genre match (+2.0), mood match (+1.5), energy similarity (+0.99)
+2. Gym Hero by Max Pulse — score 2.47
+   Because: mood match (+1.5), energy similarity (+0.97)
+```
+
+**Input:** `"calm ambient music to fall asleep to"`
+```
+Parsed profile: {'genre': 'ambient', 'mood': '', 'energy': 0.3, 'likes_acoustic': False}
+
+1. Spacewalk Thoughts by Orbit Bloom — score 2.98
+   Because: genre match (+2.0), energy similarity (+0.98)
+2. Quiet Harbor by Paper Lanterns — score 2.88
+   Because: genre match (+2.0), energy similarity (+0.88)
+```
 
 ---
 
-## Experiments You Tried
+## Design Decisions
 
-**Weight shift: halved genre (2.0 → 1.0), doubled energy (1.0 → 2.0).**
+**Why an agentic workflow (and not RAG or a fine-tuned model).** The catalog is tiny (18
+songs), so retrieval-augmented generation would be contrived, and fine-tuning is
+infeasible without training data. An agent, by contrast, reuses the *entire* existing
+engine as a tool — no vector DB, no second model — and genuinely changes behavior:
+free-text in, self-correcting output. *Trade-off:* the agentic path needs an API key and
+network access, which I mitigate with the deterministic fallback so the repo always runs.
 
-For most profiles the #1 result didn't change — the winning song was usually strong
-enough on genre+mood+energy together that halving genre alone didn't flip first
-place. But the *order below #1* shifted noticeably. For "High-Energy Pop," *Rooftop
-Lights* (genre mismatch, mood+energy match) jumped from #3 to #2, passing *Gym Hero*
-(genre match only) — because a strong energy match started outweighing a lone genre
-match. Same pattern in "Chill Lofi": *Spacewalk Thoughts* (mood+energy match, no
-genre) passed *Focus Flow* (genre+energy match, no mood).
+**Keep the deterministic engine as the trustworthy core.** The AI is only allowed to
+*call* the scoring engine, never to produce scores itself. This keeps every
+recommendation auditable and prevents the model from hallucinating songs. *Trade-off:*
+the agent is only ever as good as the engine and the 18-song catalog — it can reason
+about the request, but it can't conjure a better-matching song that doesn't exist.
 
-**Conclusion:** this made recommendations *more energy-driven and less genre-locked*,
-not objectively "more accurate" — it depends entirely on whether you believe genre or
-energy should dominate a listener's vibe. It confirmed the system is sensitive to
-weight changes exactly where you'd expect: near-tied songs re-rank, while a clear
-best-match song stays on top regardless. See [model_card.md](model_card.md) for the
-full adversarial-profile evaluation and observed biases.
+**A hand-written agent loop instead of the SDK's tool-runner helper.** I wrote the
+`while stop_reason == "tool_use"` loop explicitly so every Plan/Act/Check step is easy to
+log and reason about, and so the code has no beta-API dependency. *Trade-off:* a few more
+lines of code than the built-in runner.
+
+**Default to a strong model, but make it configurable.** The default is `claude-opus-5`
+with adaptive thinking for the best planning quality, overridable via `VIBEFINDER_MODEL`
+(e.g. `claude-haiku-4-5`) for cost/latency. *Trade-off:* quality-by-default costs more
+per call; the env var is the escape hatch.
+
+**Fail safe, not closed.** Missing credentials, auth errors, connection errors, and API
+errors all route to the deterministic fallback rather than crashing. *Trade-off:* the
+fallback is a blunt keyword matcher — it can't understand nuance like *"moody late-night
+drive"* the way the LLM can, so a graceful degrade is a real drop in quality, just not in
+availability.
+
+---
+
+## Testing Summary
+
+**At a glance:** 10 of 10 automated tests pass; the AI/agent path was human-evaluated on
+6 free-text requests (5 pass, 1 initially failed on an edge case and passes after a fix).
+Reliability is enforced three ways — automated tests, logging, and error handling that
+degrades to a deterministic fallback.
+
+**Automated tests (`pytest`)**
+
+| Area under test | Tests | Result |
+|---|---|---|
+| Scoring engine — ranking order & explanations (`test_recommender.py`) | 2 | ✅ pass |
+| Agent — input validation & clamping (`test_agent.py`) | 2 | ✅ pass |
+| Agent — catalog summary | 1 | ✅ pass |
+| Agent — keyword fallback (genre/mood/energy/acoustic parsing) | 2 | ✅ pass |
+| Agent — tool dispatch (grounded results, unknown-tool error) | 3 | ✅ pass |
+| **Total** | **10** | **✅ 10/10** |
+
+**Human evaluation of system outputs** (real captured runs; criteria checked by me)
+
+| Test input | Evaluation criteria | Result |
+|---|---|---|
+| `"upbeat and happy for a pop workout"` | Top pick is an upbeat pop song | ✅ Pass — *Sunrise City* (pop/happy, 4.42) |
+| `"intense rock for the gym"` | Top pick is an intense rock song | ✅ Pass — *Storm Runner* (rock/intense, 4.49) |
+| `"calm ambient music to fall asleep to"` | Returns calm/ambient, no aggressive tracks | ⚠️ Fail → ✅ Pass after fix (see below) |
+| `"some opera please"` (genre absent from catalog) | Degrades gracefully, no crash | ✅ Pass — falls back to energy scoring |
+| *(empty input)* | Handled safely, no crash | ✅ Pass — prompts for a request |
+| out-of-range `target_energy` (e.g. `5.0`) | Clamped into `[0, 1]` before scoring | ✅ Pass — validated by guardrail + unit test |
+
+Full details below.
+
+**What I tested.** 10 automated tests (`pytest`): the scoring engine
+(`tests/test_recommender.py`) and the agent's deterministic pieces
+(`tests/test_agent.py` — input validation/clamping, catalog summary, the keyword
+fallback, and tool dispatch). I also ran the end-to-end command on several varied
+free-text requests.
+
+**What worked.**
+- All 10 tests pass, and the scoring engine is fully deterministic, so results are
+  reproducible run-to-run.
+- The guardrails behave: out-of-range `target_energy` is clamped to `[0, 1]`, garbage
+  values fall back to safe defaults, and the tool dispatcher only ever returns real
+  catalog songs.
+- The no-credentials fallback runs cleanly end-to-end and clearly announces that it is
+  the fallback path.
+
+**What didn't (and how I fixed it).** Testing the request *"calm ambient music to fall
+asleep to"* exposed a real bug in the keyword fallback: when no mood word matched, it
+defaulted to the **alphabetically-first** mood — which happens to be *"aggressive"* — so a
+sleep playlist was being scored for aggression and surfaced a metal track (*Broken
+Mirror*). I fixed the parser to leave genre/mood **blank** when nothing is detected,
+rather than guessing a misleading default; the same request now correctly returns calm
+ambient tracks. This is committed and covered by the fallback tests.
+
+**What I couldn't unit-test.** The live Claude loop itself isn't unit-tested — it requires
+API credentials and is non-deterministic. I deliberately structured the code so the
+*deterministic* pieces (validation, parsing, tool dispatch) are pure functions that
+**can** be tested in isolation, and isolated the non-deterministic LLM call behind them.
+
+**What I learned.** Edge-case inputs surface silent defaults that "happy path" testing
+never touches — the aggressive-mood default had been invisible until I tried a request it
+didn't handle. And keeping the AI layer thin over a deterministic, testable core made the
+whole system far easier to trust and verify than if the model were producing scores directly.
+
+---
+
+## Under the Hood: The Scoring Engine
+
+The AI layer is new, but the scoring logic below is the transparent core it calls into.
+
+### Finalized Algorithm Recipe
+
+| Rule | Points |
+|---|---|
+| Genre match | `+2.0` |
+| Mood match | `+1.5` |
+| Energy similarity | `+1.0 × (1 - \|song.energy - target_energy\|)` |
+| Acoustic bonus | `+0.5` if `likes_acoustic` is `True` and `song.acousticness > 0.6` |
+
+For **categorical** features (genre, mood) the engine awards points for an exact match.
+For **numeric** features (energy) it rewards *closeness* to the target rather than
+"bigger is better." Genre outweighs mood because it's the strongest "right bucket / wrong
+bucket" signal; energy is a continuous reward since it's a closeness measure; the acoustic
+bonus is small and conditional since it only matters to some listeners. The **Ranking
+Rule** then sorts every scored song descending and returns the top *k*.
+
+### Expected biases
+
+- **Genre dominance** — because genre is worth the most, a "right genre, wrong mood" song
+  can outrank a "wrong genre, perfect mood/energy" song. The system may over-prioritize
+  genre and miss great cross-genre matches.
+- **Small, hand-picked catalog** — 18 songs across ~13 genres means most genres have only
+  1–2 songs, so results are constrained by what exists in the CSV rather than a true
+  "best match."
+- **No history / collaborative signal** — it can only compare stated preferences to song
+  metadata, so it can't surprise a listener with something outside their stated taste.
 
 ---
 
 ## Limitations and Risks
 
-- It only works on a tiny, hand-picked catalog of 18 songs, most genres having just
-  1–3 tracks, so results are limited by what happens to exist in the CSV rather than a
-  true "best match" across real-world music.
-- It does not understand lyrics, artist popularity, or listening history — only the
+- Works on a tiny, hand-picked catalog of 18 songs (most genres have 1–3 tracks), so
+  results are bounded by what exists in the CSV rather than real-world music.
+- Understands no lyrics, artist popularity, or listening history — only the
   numeric/categorical tags in the CSV.
-- Genre is the heaviest-weighted signal, so it can over-favor a matching genre even
-  when a mismatched-genre song would actually feel closer to the user's mood/energy.
-- It cannot detect contradictory preferences (e.g. `genre=metal, mood=sad`) — it just
-  maximizes whatever score is available and returns a confident top 5 regardless.
+- Genre is the heaviest-weighted signal, so it can over-favor a matching genre even when a
+  mismatched-genre song would feel closer to the listener's mood/energy.
+- It cannot detect contradictory preferences (e.g. `genre=metal, mood=sad`) — it maximizes
+  whatever score is available and confidently returns a top 5 regardless.
+- The agentic path depends on an external API (cost, latency, and availability); the
+  keyword fallback keeps the system *available* but at noticeably lower quality.
 
-See [model_card.md](model_card.md) for the full evaluation, including adversarial
-profiles that surfaced these issues directly.
+See [model_card.md](model_card.md) for the full evaluation, including adversarial profiles
+that surfaced these issues directly.
 
 ---
 
 ## Reflection
 
-Read and complete `model_card.md`:
+Building this reinforced that a "recommendation" is really just scoring plus sorting —
+and that layering an AI agent on top doesn't change where the intelligence (or the bias)
+lives: it lives in the engine's weights. The agent made the system *easier to talk to*,
+not *more objective*.
 
-[**Model Card**](model_card.md)
-
-Building this showed me that a "recommendation" is really just scoring plus sorting —
-there's no hidden intelligence in between. Once every song has a single number, the
-ranking step is almost trivial; the real design work is deciding which features to
-compare and how much weight to give each one. That also means bias enters at the
-weighting stage, not some mysterious later step: because I weighted genre highest, the
-system will always favor "right genre, wrong everything else" over "wrong genre, right
-everything else," which is a value judgment I made, not a fact about music.
-
-Testing adversarial profiles made the unfairness risk concrete. When I gave the system
-a contradictory profile (`genre=metal, mood=sad, energy=0.9`), it confidently
-recommended an aggressive-sounding song anyway — it has no way to notice that a
-request doesn't make sense, so it will always produce a top 5, even when none of them
-are a good fit. A real system with more data and more users could hide this same
-flaw much better, which is exactly why it's worth understanding at this small, visible
-scale first.
-
-
-
+> **Note:** My graded responsible-AI reflection — how I collaborated with AI, one helpful
+> and one flawed AI suggestion, and the system's limitations — lives in
+> [**model_card.md**](model_card.md), not here.
